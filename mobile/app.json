@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "MiniLedger",
+    "slug": "miniledger",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#F5F7FB"
+    },
+    "android": {
+      "package": "com.shravan.miniledger"
+    },
+    "ios": {
+      "bundleIdentifier": "com.shravan.miniledger"
+    }
+  }
+}

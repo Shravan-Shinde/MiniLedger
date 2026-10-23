@@ -1,0 +1,21 @@
+{
+  "name": "miniledger",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MiniLedger — Money Lending Tracker",
+  "scripts": {
+    "install:backend": "npm --prefix backend install",
+    "install:mobile": "npm --prefix mobile install",
+    "install:all": "npm run install:backend && npm run install:mobile",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "npm --prefix backend run build && cd backend && npx prisma migrate deploy",
+    "db:generate": "cd backend && npx prisma generate",
+    "dev:backend": "npm --prefix backend run dev",
+    "start:mobile": "cd mobile && npx expo start",
+    "test:backend": "npm --prefix backend test",
+    "typecheck:backend": "npm --prefix backend run build",
+    "typecheck:mobile": "npm --prefix mobile run typecheck",
+    "doctor:mobile": "cd mobile && npx expo-doctor"
+  }
+}
