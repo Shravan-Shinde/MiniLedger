@@ -28,8 +28,6 @@ A reliable, full-stack personal finance application built with **React Native (E
 21. [Root-Level Convenience Scripts](#21-root-level-convenience-scripts)
 22. [Common Troubleshooting](#22-common-troubleshooting)
 23. [Security Architecture & Known Limitations](#23-security-architecture--known-limitations)
-24. [Optional Bonus: Receipt Upload Design](#24-optional-bonus-receipt-upload-design)
-25. [2–3 Minute Demo Recording Script](#25-23-minute-demo-recording-script)
 
 ---
 
@@ -649,27 +647,3 @@ If another PostgreSQL instance is running on port 5432:
 - **Sensitive Credentials**: All environment credentials are kept in `.env` files which are excluded from Git tracking via `.gitignore`.
 
 ---
-
-## 24. Optional Bonus: Receipt Upload Design
-
-The core lending, calculations, and mobile interfaces were prioritized and perfected. For receipt photos, the recommended architectural design is:
-1. **Frontend**: Use `expo-image-picker` to capture or select a photo.
-2. **Transfer**: Upload via `multipart/form-data` with JWT authentication to `POST /api/loans/:id/receipt`.
-3. **Backend Storage**: Store the image on disk in a private directory (or S3/Cloud Storage bucket) and save only the relative path/URI in a `receiptUrl` column in PostgreSQL. Large binary BLOBs must never be stored directly in PostgreSQL.
-4. **Access Control**: Serve via authenticated stream `GET /api/loans/:id/receipt` ensuring only the owner of the loan can download or view the receipt.
-
----
-
-## 25. 2–3 Minute Demo Recording Script
-
-Use this structured script when recording your screen recording using **Loom**, **OBS**, or **Google Drive**:
-
-| Timestamp | Screen / Action | Narration & Visual Points |
-|---|---|---|
-| **0:00 – 0:25** | **Architecture Overview** | Briefly show VS Code with the project structure: `backend` (TypeScript + Express + Prisma + PostgreSQL) and `mobile` (React Native Expo SDK 53). Mention the running PostgreSQL Docker container. |
-| **0:25 – 0:50** | **Authentication & Mock OTP** | Open the mobile app. Enter a phone number (e.g. `+91 9876543210`). Tap **Send Mock OTP**. Switch to backend terminal to show the printed 6-digit OTP. Enter the OTP into the app and tap **Verify and Continue**. |
-| **0:50 – 1:20** | **Dashboard & Summary Cards** | Show the dashboard: Outstanding balance hero card, along with Total Lent, Total Repaid, Overdue, and Fully Repaid cards. Explain that calculations are computed strictly by PostgreSQL and the backend API. |
-| **1:20 – 1:50** | **Adding a Loan** | Tap **＋ Add Loan**. Enter Friend's Name (*"Rahul"*), Amount (*"₹5000"*), and use the quick preset chip (*"+7 Days"*). Save the loan. Show the new loan appearing in the list with `PENDING` status and updated dashboard totals. |
-| **1:50 – 2:20** | **Repayment Flow** | Tap **Record Repayment** on a loan. Show the modal with balance breakdown. Record a partial repayment (e.g. ₹2,000). Show remaining balance reducing to ₹3,000 and Total Repaid updating. Tap **Mark Entire Balance as Repaid** to show status change to `REPAID`. |
-| **2:20 – 2:45** | **Overdue Highlighting** | Add a loan with a past due date (e.g. yesterday). Show the loan card highlighted with a red border, overdue badge, and overdue amount reflected on the red summary card. |
-| **2:45 – 3:00** | **Automated Tests & Wrap-Up** | Switch to the terminal. Run `npm run test:backend` to demonstrate all 29 automated tests passing in seconds. Conclude with submission readiness. |
