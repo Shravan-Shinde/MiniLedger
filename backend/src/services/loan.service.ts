@@ -63,6 +63,11 @@ async function findOwnedLoan(userId: string, loanId: string) {
   return loan;
 }
 
+export async function getLoanById(userId: string, loanId: string, asOfDate = new Date()) {
+  const loan = await findOwnedLoan(userId, loanId);
+  return serializeLoan(loan, asOfDate);
+}
+
 export async function recordRepayment(userId: string, loanId: string, amount: number) {
   return prisma.$transaction(async (tx) => {
     const loan = await tx.loan.findFirst({
@@ -98,7 +103,7 @@ export async function getSummary(userId: string, asOfDate = new Date()) {
   const loans = await prisma.loan.findMany({ where: { userId }, include: { repayments: true } });
   const today = asOfDate.toISOString().slice(0, 10);
   let lentCents = 0, repaidCents = 0, outstandingCents = 0, overdueCents = 0;
-  let activeLoans = 0, repaidLoans = 0;
+  let activeLoans = 0, repaidLoans = 0, partiallyRepaidLoans = 0, overdueLoans = 0;
   for (const loan of loans) {
     const loanCents = toCents(loan.amount.toString());
     const paidCents = getPaidCents(loan.repayments);
@@ -106,19 +111,34 @@ export async function getSummary(userId: string, asOfDate = new Date()) {
     lentCents += loanCents;
     repaidCents += paidCents;
     outstandingCents += remaining;
-    if (remaining === 0) repaidLoans += 1;
-    else {
+    if (remaining === 0) {
+      repaidLoans += 1;
+    } else {
       activeLoans += 1;
-      if (loan.dueDate.toISOString().slice(0, 10) < today) overdueCents += remaining;
+      if (paidCents > 0) partiallyRepaidLoans += 1;
+      if (loan.dueDate.toISOString().slice(0, 10) < today) {
+        overdueCents += remaining;
+        overdueLoans += 1;
+      }
     }
   }
+  const totalLent = fromCents(lentCents);
+  const totalRepaid = fromCents(repaidCents);
+  const outstandingAmount = fromCents(outstandingCents);
+  const overdueAmount = fromCents(overdueCents);
+
   return {
-    totalLent: fromCents(lentCents),
-    totalRepaid: fromCents(repaidCents),
-    outstandingAmount: fromCents(outstandingCents),
-    overdueAmount: fromCents(overdueCents),
+    totalLent,
+    totalRepaid,
+    outstandingAmount,
+    totalOutstandingAmount: outstandingAmount,
+    overdueAmount,
+    totalOverdueAmount: overdueAmount,
     activeLoans,
+    partiallyRepaidLoans,
     repaidLoans,
+    fullyRepaidLoans: repaidLoans,
+    overdueLoans,
     totalLoans: loans.length
   };
 }

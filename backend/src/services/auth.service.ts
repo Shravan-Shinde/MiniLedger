@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { env } from "../config/env";
 import { AppError } from "../utils/errors";
@@ -54,12 +55,29 @@ export async function verifyOtp(phoneInput: string, otp: string) {
     throw new AppError(400, "Invalid OTP.", "INVALID_OTP");
   }
 
-  otpStore.delete(phone); // One-time use.
-  const user = await prisma.user.upsert({
-    where: { phone },
-    update: {},
-    create: { phone }
-  });
+  let user;
+  try {
+    user = await prisma.user.upsert({
+      where: { phone },
+      update: {},
+      create: { phone }
+    });
+  } catch (error: any) {
+    if (
+      error instanceof Prisma.PrismaClientInitializationError ||
+      error?.code === "P1001" ||
+      error?.code === "P1002" ||
+      error?.code === "P1017" ||
+      error?.name === "PrismaClientInitializationError"
+    ) {
+      throw new AppError(503, "Database service unavailable. Please try again.", "DATABASE_UNAVAILABLE");
+    }
+    throw error;
+  }
+
+  // Database upsert succeeded; now consume the OTP (one-time use).
+  otpStore.delete(phone);
+
   const token = jwt.sign({ sub: user.id, phone: user.phone }, env.JWT_SECRET, { expiresIn: "7d" });
   return { token, user: { id: user.id, phone: user.phone } };
 }

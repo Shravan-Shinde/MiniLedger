@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -16,7 +17,7 @@ import {
   View
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { api, Loan, Summary, TOKEN_KEY } from "./src/api";
+import { api, API_BASE_URL, Loan, Summary, TOKEN_KEY } from "./src/api";
 
 const money = (amount: number) => `₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -115,6 +116,33 @@ export default function App() {
     }, 1000);
     return () => clearInterval(interval);
   }, [resendCooldown]);
+
+  // Android hardware back button navigation
+  useEffect(() => {
+    const onBackPress = () => {
+      if (repayModalVisible) {
+        setRepayModalVisible(false);
+        setSelectedLoan(null);
+        setError("");
+        return true;
+      }
+      if (screen === "add") {
+        setScreen("dashboard");
+        setError("");
+        return true;
+      }
+      if (screen === "auth" && otpRequested) {
+        setOtpRequested(false);
+        setOtp("");
+        setError("");
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => subscription.remove();
+  }, [repayModalVisible, screen, otpRequested]);
 
   const loadDashboard = useCallback(async () => {
     const [loanResult, summaryResult] = await Promise.all([api.getLoans(), api.getSummary()]);
@@ -344,7 +372,7 @@ export default function App() {
             {!!error && <Text style={styles.errorText}>{error}</Text>}
           </View>
 
-          <Text style={styles.footnote}>Development demo · Check the backend terminal for OTP</Text>
+          <Text style={styles.footnote}>Connected to: {API_BASE_URL} · Check terminal for OTP</Text>
         </KeyboardAvoidingView>
       </SafeAreaView>
     );

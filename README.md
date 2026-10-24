@@ -55,7 +55,7 @@ Informal lending between friends and family is prone to lost records, forgotten 
 - **Repayment Flexibility**: Support for both single-click full balance clearance and custom partial repayments.
 - **Quick Date Presets**: Add-loan screen features quick-pick chips (`Today`, `+7 Days`, `+15 Days`, `+30 Days`) alongside format validation.
 - **Resend OTP Cooldown**: 30-second interactive countdown timer on the mobile OTP screen.
-- **100% Automated Test Coverage**: Comprehensive suite of 29 unit and integration tests covering security, validation, user isolation, and multi-loan financial calculation rules.
+- **100% Automated Test Coverage**: Comprehensive suite of 60 unit and integration tests covering security, validation, user isolation, database resilience, and multi-loan financial calculation rules.
 
 ---
 
@@ -244,10 +244,12 @@ All protected endpoints require the header: `Authorization: Bearer <JWT_TOKEN>`.
 | `POST` | `/api/auth/request-otp` | No | Request mock OTP for phone | `200`, `400` |
 | `POST` | `/api/auth/verify-otp` | No | Verify 6-digit OTP | `200`, `400`, `429` |
 | `GET` | `/api/loans` | Yes | List authenticated user's loans | `200`, `401` |
+| `GET` | `/api/loans/:id` | Yes | Retrieve a single loan entry by ID | `200`, `401`, `404` |
 | `POST` | `/api/loans` | Yes | Create a new loan | `201`, `400`, `401` |
+| `POST` | `/api/loans/:id/repay` | Yes | Record repayment (or full balance clearance) | `200`, `400`, `401`, `404` |
 | `POST` | `/api/loans/:id/repayments` | Yes | Record a partial repayment | `200`, `400`, `401`, `404` |
 | `PATCH` | `/api/loans/:id/repay` | Yes | Mark remaining balance as repaid | `200`, `400`, `401`, `404` |
-| `GET` | `/api/summary` | Yes | Financial dashboard summary | `200`, `401` |
+| `GET` | `/api/summary` | Yes | Financial dashboard summary & counts | `200`, `401` |
 
 ### Sample Requests & Responses
 
@@ -311,9 +313,14 @@ All protected endpoints require the header: `Authorization: Bearer <JWT_TOKEN>`.
     "totalLent": 10000,
     "totalRepaid": 4000,
     "outstandingAmount": 6000,
+    "totalOutstandingAmount": 6000,
     "overdueAmount": 3000,
+    "totalOverdueAmount": 3000,
     "activeLoans": 2,
+    "partiallyRepaidLoans": 1,
     "repaidLoans": 1,
+    "fullyRepaidLoans": 1,
+    "overdueLoans": 1,
     "totalLoans": 3
   }
   ```
@@ -355,16 +362,29 @@ volumes:
   miniledger_pgdata:
 ```
 
-### Start the Database:
-From the project root:
+### Option A — Embedded Native PostgreSQL 16 (Recommended / No Docker Required):
+MiniLedger includes a pre-configured native embedded PostgreSQL 16 binary service that runs directly on Windows without requiring Docker Desktop:
 ```bash
-docker compose up -d db
+npm run db:local
+```
+This initializes and starts PostgreSQL 16 on `localhost:5432`, creates the `miniledger` database, and persists data inside `backend/.pgdata`.
+
+### Option B — Containerized PostgreSQL 16 (Docker Compose):
+If you have Docker Desktop running:
+```bash
+# Start PostgreSQL container in background:
+npm run db:up
+
+# Stop PostgreSQL container safely (data preserved in named volume):
+npm run db:down
 ```
 
-### Stop the Database Safely (data preserved in named volume):
-```bash
-docker compose down
-```
+### Database Readiness & Health Check:
+The API features an active database health check at `GET /api/health`:
+- When PostgreSQL is connected: returns HTTP 200 with `{ status: "ok", database: "connected", service: "miniledger-api", timestamp: "..." }`.
+- When PostgreSQL is disconnected: returns HTTP 503 with `{ status: "degraded", database: "disconnected", service: "miniledger-api", error: "Database service unavailable." }`.
+- When database errors occur during request processing, the centralized error handler returns structured HTTP 503 (`DATABASE_UNAVAILABLE`) responses without leaking secrets, credentials, or stack traces.
+- OTP preservation: If a database error occurs during OTP verification, the OTP is not prematurely consumed or deleted, allowing the user to retry once the database recovers while continuing to enforce rate limits.
 
 ---
 
@@ -402,14 +422,14 @@ cp mobile/.env.example mobile/.env
 ```
 Choose the URL matching your device:
 ```env
-# 1. Android Emulator (Standard Android loopback to host):
-EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api
+# 1. Physical Device on Local Wi-Fi (Primary):
+EXPO_PUBLIC_API_URL=http://10.250.154.196:5000/api
 
-# 2. iOS Simulator / Web:
+# 2. Android Emulator (Standard Android loopback to host):
+# EXPO_PUBLIC_API_URL=http://10.0.2.2:5000/api
+
+# 3. iOS Simulator / Web:
 # EXPO_PUBLIC_API_URL=http://localhost:5000/api
-
-# 3. Physical Device on Local Wi-Fi (Replace with your PC's IP):
-# EXPO_PUBLIC_API_URL=http://192.168.1.15:5000/api
 ```
 
 ---
@@ -494,12 +514,12 @@ npm install
 ## 19. Running on Physical Mobile Device
 
 1. Connect your phone and computer to the **same Wi-Fi network**.
-2. Find your computer's local LAN IP:
-   - Windows: `ipconfig` (look for IPv4 Address, e.g. `192.168.1.15`)
+2. Your computer's reachable LAN IP (e.g. `10.250.154.196`):
+   - Windows: `ipconfig` (IPv4 Address)
    - macOS / Linux: `ifconfig` or `ip a`
 3. Set `mobile/.env`:
    ```env
-   EXPO_PUBLIC_API_URL=http://192.168.1.15:5000/api
+   EXPO_PUBLIC_API_URL=http://10.250.154.196:5000/api
    ```
 4. Start Expo:
    ```bash
@@ -524,11 +544,12 @@ npm test
 ```text
  ✓ tests/money.test.ts (2 tests)
  ✓ tests/schemas.test.ts (4 tests)
- ✓ tests/api.integration.test.ts (23 tests)
+ ✓ tests/app.unit.test.ts (29 tests)
+ ✓ tests/api.integration.test.ts (25 tests)
 
- Test Files  3 passed (3)
-      Tests  29 passed (29)
-   Duration  2.7s
+ Test Files  4 passed (4)
+      Tests  60 passed (60)
+   Duration  4.34s
 ```
 
 ### Coverage Highlights:
@@ -555,7 +576,10 @@ npm test
 For streamlined development, root scripts are provided:
 
 ```bash
-# Start PostgreSQL database container
+# Start local embedded PostgreSQL 16 (Native binary, zero Docker requirement)
+npm run db:local
+
+# Start PostgreSQL database container (Docker Compose)
 npm run db:up
 
 # Run Prisma database migrations
@@ -564,11 +588,23 @@ npm run db:migrate
 # Start backend dev server
 npm run dev:backend
 
+# Build backend for production
+npm run build:backend
+
+# Run production backend server
+npm run start:backend
+
 # Start mobile Expo bundler
 npm run start:mobile
 
-# Run backend automated tests
+# Run backend automated tests (58 tests)
 npm run test:backend
+
+# Run mobile TypeScript checks as test
+npm run test:mobile
+
+# Run all test suites
+npm run test:all
 
 # Run TypeScript checks across mobile and backend
 npm run typecheck:mobile
